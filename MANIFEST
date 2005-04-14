@@ -1,0 +1,10 @@
+Changes
+MANIFEST
+META.yml # Will be created by "make dist"
+Makefile.PL
+README
+lib/Gtk2/Ex/ICal/Recur.pm
+lib/Gtk2/Ex/ICal/Recur/Selection.pm
+examples/blank-start.pl
+examples/pre-populated-1.pl
+examples/pre-populated-2.pl
