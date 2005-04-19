@@ -38,4 +38,3 @@ $window->set_default_size(700,350);
 $window->show_all;
 
 Gtk2->main;
-

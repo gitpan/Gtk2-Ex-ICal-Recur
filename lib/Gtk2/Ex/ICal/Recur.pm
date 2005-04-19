@@ -1,41 +1,35 @@
-# COPYRIGHT
-# Copyright (C) 2005 ofey.aikon@gmail.com
-# This library is free software; you can redistribute it and/or modify it under the terms of the 
-# GNU Library General Public License as published by the Free Software Foundation; 
-# This library is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-# without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the GNU Library General Public License for more details.
-# You should have received a copy of the GNU Library General Public License along with this library;
-# if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307 USA.
-
 package Gtk2::Ex::ICal::Recur;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 use strict;
 use warnings;
 use Gtk2 '-init';
 use Gtk2::Ex::Simple::Menu;
+use Gtk2::Ex::Simple::List;
 use Glib qw /TRUE FALSE/;
 use Data::Dumper;
 use Gtk2::Ex::ICal::Recur::Selection;
 use DateTime::Event::ICal;
 
+###########################################################
+# There are four public methods. The rest are all private #
+###########################################################
+
 sub new {
-	my ($class, $column_names, $data_attributes) = @_;
+	my ($class) = @_;
 	my $self  = {};
 	$self->{freqspinbutton} = Gtk2::SpinButton->new_with_range(1,100,1);
 	$self->{freqcombobox} = Gtk2::ComboBox->new_text();	
 	$self->{recurrencepatterntable} = Gtk2::Table->new(1,1,FALSE);
-	$self->{widgets} = undef;
-	$self->{buttons} = undef;
+	$self->{recurbox}->{hbox} = undef;
+	$self->{recurbox}->{buttons} = undef;
 	$self->{freqchoices} = [ 
 		{ 'label' => 'Year(s)' , 'code' => 'yearly' },
 		{ 'label' => 'Month(s)', 'code' => 'monthly' },
 		{ 'label' => 'Week(s)' , 'code' => 'weekly' },
 		{ 'label' => 'Day(s)'  , 'code' => 'daily' },
 	];	
-
 	$self->{icalselection} = Gtk2::Ex::ICal::Recur::Selection->new;
 	bless ($self, $class);
 	$self->{widget} = $self->package_all;
@@ -44,12 +38,6 @@ sub new {
 
 sub update_preview {
 	my ($self) = @_;
-	my $list = [
-		['Apr 1, 2005'],
-		['Apr 2, 2005'],
-		['Apr 3, 2005'],
-		['Apr 4, 2005'],
-	];
 	my $temp = [
 		['Generating Preview'],
 		['Please wait...'],
@@ -68,15 +56,14 @@ sub update_preview {
 	} else {
 		@{$self->{preview}->{slist}->{data}} = @$none;
 	}
-	#@{$self->{preview}->{slist}->{data}} = @$list;
 }
 
 sub set_model {
 	my ($self, $model) = @_;
 	$self->{model} = $model;
-	$self->{widgets} = undef;
+	$self->{recurbox}->{hbox} = undef;
 	my $temphash = $self->controller(0, 0);
-	$self->{widgets}->[0]->[0] = $self->create_box(0,0,$temphash);
+	$self->{recurbox}->{hbox}->[0]->[0] = $self->create_box(0,0,$temphash);
 	$self->packbox();
 	$self->{freqspinbutton}->set_value($model->{interval});
 	my $mapped = { 'yearly' => 0, 'monthly' => 1, 'weekly' => 2, 'daily' => 3 };
@@ -130,7 +117,7 @@ sub get_model {
 	my $freqcombochoice = $self->{freqchoices}->[$self->{freqcombobox}->get_active()]->{'code'};
 	$model->{freq} = $freqcombochoice;
 	$model->{interval} = $self->{freqspinbutton}->get_value;
-	foreach my $level (@{$self->{buttons}}) {
+	foreach my $level (@{$self->{recurbox}->{buttons}}) {
 		my $i = 0;
 		foreach my $count (@$level) {
 			my $type = $count->{type};
@@ -403,10 +390,10 @@ sub get_widget {
 	
 	$self->{freqcombobox}->signal_connect('changed' => 
 		sub {
-			$self->{widgets} = undef;
-			$self->{buttons} = undef;
+			$self->{recurbox}->{hbox} = undef;
+			$self->{recurbox}->{buttons} = undef;
 			my $temphash = $self->controller(0, 0);
-			$self->{widgets}->[0]->[0] = $self->create_box(0,0,$temphash);
+			$self->{recurbox}->{hbox}->[0]->[0] = $self->create_box(0,0,$temphash);
 			$self->packbox();
 		}
 	);
@@ -501,12 +488,12 @@ sub set_month_day_by_week {
 sub update_ui_from_model {
 	my ($self, $list, $hash, $string, $level) = @_;
 	for (my $i=0; $i<=$#{@$list}; $i++) {
-		$self->{buttons}->[$level]->[$i]->{simplemenu}->get_widget($string.$hash->{$list->[$i]})->activate;
-		$self->{buttons}->[$level]->[$i]->{next}->set_sensitive(FALSE);
+		$self->{recurbox}->{buttons}->[$level]->[$i]->{simplemenu}->get_widget($string.$hash->{$list->[$i]})->activate;
+		$self->{recurbox}->{buttons}->[$level]->[$i]->{next}->set_sensitive(FALSE);
 		if ($i<$#{@$list}) {
 			$self->addbuttonclicked($level, $i);
-			$self->{buttons}->[$level]->[$i]->{add}->set_sensitive(FALSE);
-			$self->{buttons}->[$level]->[$i]->{remove}->set_sensitive(FALSE);
+			$self->{recurbox}->{buttons}->[$level]->[$i]->{add}->set_sensitive(FALSE);
+			$self->{recurbox}->{buttons}->[$level]->[$i]->{remove}->set_sensitive(FALSE);
 		} else {
 			$self->nextbuttonclicked($level, $i);
 		}
@@ -528,7 +515,7 @@ sub controller {
 		} elsif ($freqcombochoice eq 'daily') {
 		}
 	} elsif ($level == 1) {
-		my $parent = $self->{buttons}->[$level-1]->[0]->{type};
+		my $parent = $self->{recurbox}->{buttons}->[$level-1]->[0]->{type};
 		if ($parent eq 'bymonth') {
 			$temphash = $self->day_of_the_month($level,$count);
 		} elsif ($parent eq 'byyearday') {
@@ -546,7 +533,7 @@ sub controller {
 sub packbox {
 	my ($self) = @_;
 	my $rows = 0;
-	foreach my $level (@{$self->{widgets}}) {
+	foreach my $level (@{$self->{recurbox}->{hbox}}) {
 		foreach my $count (@$level) {
 			$rows++ if ($count);
 		}
@@ -561,7 +548,7 @@ sub packbox {
 	$self->{recurrencepatterntable}->resize($rows,5) if ($rows > 0);
 	
 	my $row = 0;
-	foreach my $level (@{$self->{widgets}}) {
+	foreach my $level (@{$self->{recurbox}->{hbox}}) {
 		foreach my $count (@$level) {
 			my $col = 0;
 			foreach my $widget (@$count) {
@@ -585,9 +572,9 @@ sub create_box {
 	my $addbutton = Gtk2::Button->new_with_label('add another');
 	my $nextbutton = Gtk2::Button->new_with_label('Continue>>');
 	my $removebutton = Gtk2::Button->new_with_label('remove this');
-	$self->{buttons}->[$level]->[$count]->{add} = $addbutton;
-	$self->{buttons}->[$level]->[$count]->{next} = $nextbutton;
-	$self->{buttons}->[$level]->[$count]->{remove} = $removebutton;	
+	$self->{recurbox}->{buttons}->[$level]->[$count]->{add} = $addbutton;
+	$self->{recurbox}->{buttons}->[$level]->[$count]->{next} = $nextbutton;
+	$self->{recurbox}->{buttons}->[$level]->[$count]->{remove} = $removebutton;	
 	$addbutton->set_sensitive(FALSE);
 	$nextbutton->set_sensitive(FALSE);
 	$removebutton->set_sensitive(FALSE);
@@ -612,8 +599,8 @@ sub create_box {
 		}
 	);
 	
-	$self->{buttons}->[$level]->[$count]->{simplemenu} = $temphash->{simplemenu};	
-	$self->{buttons}->[$level]->[$count]->{label} = $temphash->{label};	
+	$self->{recurbox}->{buttons}->[$level]->[$count]->{simplemenu} = $temphash->{simplemenu};	
+	$self->{recurbox}->{buttons}->[$level]->[$count]->{label} = $temphash->{label};	
 	push @$box_as_array, $temphash->{simplemenu}->{widget};
 	push @$box_as_array, $temphash->{label};
 	push @$box_as_array, $addbutton;
@@ -626,45 +613,45 @@ sub create_box {
 sub nextbuttonclicked {
 	my ($self, $level, $count) = @_;
 	# If there are rows underneath
-	return if ($#{@{$self->{widgets}->[$level+1]}} >= 0);	
-	my $currentcount = $#{$self->{widgets}->[$level+1]};
+	return if ($#{@{$self->{recurbox}->{hbox}->[$level+1]}} >= 0);	
+	my $currentcount = $#{$self->{recurbox}->{hbox}->[$level+1]};
 	my $temphash = $self->controller($level+1, $currentcount+1);
-	$self->{widgets}->[$level+1]->[$currentcount+1] = $self->create_box($level+1, $currentcount+1, $temphash);
+	$self->{recurbox}->{hbox}->[$level+1]->[$currentcount+1] = $self->create_box($level+1, $currentcount+1, $temphash);
 	$self->packbox();
 }
 
 sub addbuttonclicked {
 	my ($self, $level, $count) = @_;
 	my $temphash = $self->controller($level, $count+1);
-	$self->{buttons}->[$level]->[$count]->{simplemenu}->{widget}->set_sensitive(FALSE);
+	$self->{recurbox}->{buttons}->[$level]->[$count]->{simplemenu}->{widget}->set_sensitive(FALSE);
 	if ($level > 0) {
-		my $count = $#{$self->{widgets}->[$level-1]};
-		$self->{buttons}->[$level-1]->[$count]->{next}->set_sensitive(FALSE);
+		my $count = $#{$self->{recurbox}->{hbox}->[$level-1]};
+		$self->{recurbox}->{buttons}->[$level-1]->[$count]->{next}->set_sensitive(FALSE);
 	}
-	$self->{widgets}->[$level]->[$count+1] = $self->create_box($level, $count+1, $temphash);
-	if ($#{@{$self->{widgets}->[$level+1]}} >= 0) {
-		$self->{buttons}->[$level]->[$count+1]->{next}->set_sensitive(FALSE);		
+	$self->{recurbox}->{hbox}->[$level]->[$count+1] = $self->create_box($level, $count+1, $temphash);
+	if ($#{@{$self->{recurbox}->{hbox}->[$level+1]}} >= 0) {
+		$self->{recurbox}->{buttons}->[$level]->[$count+1]->{next}->set_sensitive(FALSE);		
 	}
 	$self->packbox();
 }
 
 sub removebuttonclicked {
 	my ($self, $level, $count) = @_;
-	delete($self->{widgets}->[$level]->[$count]);
-	delete($self->{buttons}->[$level]->[$count]);
+	delete($self->{recurbox}->{hbox}->[$level]->[$count]);
+	delete($self->{recurbox}->{buttons}->[$level]->[$count]);
 	if ($count>0) {
-		$self->{buttons}->[$level]->[$count-1]->{simplemenu}->{widget}->set_sensitive(TRUE);
-		$self->{buttons}->[$level]->[$count-1]->{add}->set_sensitive(TRUE);
-		if (!$self->{widgets}->[$level+1]) {
-			$self->{buttons}->[$level]->[$count-1]->{next}->set_sensitive(TRUE);
+		$self->{recurbox}->{buttons}->[$level]->[$count-1]->{simplemenu}->{widget}->set_sensitive(TRUE);
+		$self->{recurbox}->{buttons}->[$level]->[$count-1]->{add}->set_sensitive(TRUE);
+		if (!$self->{recurbox}->{hbox}->[$level+1]) {
+			$self->{recurbox}->{buttons}->[$level]->[$count-1]->{next}->set_sensitive(TRUE);
 		}
-		$self->{buttons}->[$level]->[$count-1]->{remove}->set_sensitive(TRUE);
+		$self->{recurbox}->{buttons}->[$level]->[$count-1]->{remove}->set_sensitive(TRUE);
 	} else {
-		for (my $i=$level+1; $i<=$#{@{$self->{widgets}}}; $i++) {
-			delete($self->{widgets}->[$i]);
+		for (my $i=$level+1; $i<=$#{@{$self->{recurbox}->{hbox}}}; $i++) {
+			delete($self->{recurbox}->{hbox}->[$i]);
 		}
-		my $lastcount = $#{@{$self->{widgets}->[$level-1]}};
-		$self->{buttons}->[$level-1]->[$lastcount]->{next}->set_sensitive(TRUE);
+		my $lastcount = $#{@{$self->{recurbox}->{hbox}->[$level-1]}};
+		$self->{recurbox}->{buttons}->[$level-1]->[$lastcount]->{next}->set_sensitive(TRUE);
 	}
 	$self->packbox();
 }
@@ -677,15 +664,15 @@ sub day_of_the_month {
 		my $type = $data->[0];
 		my $text = $data->[1];
 		my $code = $data->[2];
-		$self->{buttons}->[$level]->[$count]->{code} = $code;
-		$self->{buttons}->[$level]->[$count]->{type} = $type;
+		$self->{recurbox}->{buttons}->[$level]->[$count]->{code} = $code;
+		$self->{recurbox}->{buttons}->[$level]->[$count]->{type} = $type;
 		$text = "and $text" if ($count > 0);
 		$label->set_label($text);
-		$self->{buttons}->[$level]->[$count]->{add}->set_label('add another day');
-		$self->{buttons}->[$level]->[$count]->{remove}->set_label('remove this day');
-		$self->{buttons}->[$level]->[$count]->{add}->set_sensitive(TRUE);
-		#$self->{buttons}->[$level]->[$count]->{next}->set_sensitive(TRUE);
-		$self->{buttons}->[$level]->[$count]->{remove}->set_sensitive(TRUE);
+		$self->{recurbox}->{buttons}->[$level]->[$count]->{add}->set_label('add another day');
+		$self->{recurbox}->{buttons}->[$level]->[$count]->{remove}->set_label('remove this day');
+		$self->{recurbox}->{buttons}->[$level]->[$count]->{add}->set_sensitive(TRUE);
+		#$self->{recurbox}->{buttons}->[$level]->[$count]->{next}->set_sensitive(TRUE);
+		$self->{recurbox}->{buttons}->[$level]->[$count]->{remove}->set_sensitive(TRUE);
 	};
 	my $menu_tree = [
 		'^'  => {
@@ -704,7 +691,7 @@ sub day_of_the_month {
 	];
 	if ($count > 0) {
 		# Understand the $count=0 selection
-		my $brother = $self->{buttons}->[$level]->[0]->{type};
+		my $brother = $self->{recurbox}->{buttons}->[$level]->[0]->{type};
 		if ($brother eq 'byday') {
 			$menu_tree = [
 				'^'  => {
@@ -746,15 +733,15 @@ sub day_of_the_week {
 		my $type = $data->[0];
 		my $text = $data->[1];
 		my $code = $data->[2];
-		$self->{buttons}->[$level]->[$count]->{code} = $code;
-		$self->{buttons}->[$level]->[$count]->{type} = $type;
+		$self->{recurbox}->{buttons}->[$level]->[$count]->{code} = $code;
+		$self->{recurbox}->{buttons}->[$level]->[$count]->{type} = $type;
 		$text = "and $text" if ($count > 0);
 		$label->set_label($text);
-		$self->{buttons}->[$level]->[$count]->{add}->set_label('add another weekday');
-		$self->{buttons}->[$level]->[$count]->{remove}->set_label('remove this weekday');
-		$self->{buttons}->[$level]->[$count]->{add}->set_sensitive(TRUE);
-		#$self->{buttons}->[$level]->[$count]->{next}->set_sensitive(TRUE);
-		$self->{buttons}->[$level]->[$count]->{remove}->set_sensitive(TRUE);
+		$self->{recurbox}->{buttons}->[$level]->[$count]->{add}->set_label('add another weekday');
+		$self->{recurbox}->{buttons}->[$level]->[$count]->{remove}->set_label('remove this weekday');
+		$self->{recurbox}->{buttons}->[$level]->[$count]->{add}->set_sensitive(TRUE);
+		#$self->{recurbox}->{buttons}->[$level]->[$count]->{next}->set_sensitive(TRUE);
+		$self->{recurbox}->{buttons}->[$level]->[$count]->{remove}->set_sensitive(TRUE);
 	};
 	my $menu_tree = [
 		'^'  => {
@@ -778,28 +765,28 @@ sub month_or_day_of_the_year {
 		my $type = $data->[0];
 		my $text = $data->[1];
 		my $code = $data->[2];
-		$self->{buttons}->[$level]->[$count]->{code} = $code;
-		$self->{buttons}->[$level]->[$count]->{type} = $type;
+		$self->{recurbox}->{buttons}->[$level]->[$count]->{code} = $code;
+		$self->{recurbox}->{buttons}->[$level]->[$count]->{type} = $type;
 		$text = "and $text" if ($count > 0);
 		$label->set_label($text);
 		if ($type eq 'bymonth') {
-			$self->{buttons}->[$level]->[$count]->{add}->set_label('add another month');
-			$self->{buttons}->[$level]->[$count]->{remove}->set_label('remove this month');
-			if ($#{@{$self->{widgets}->[$level+1]}} <= 0) {
-				$self->{buttons}->[$level]->[$count]->{next}->set_sensitive(TRUE);
+			$self->{recurbox}->{buttons}->[$level]->[$count]->{add}->set_label('add another month');
+			$self->{recurbox}->{buttons}->[$level]->[$count]->{remove}->set_label('remove this month');
+			if ($#{@{$self->{recurbox}->{hbox}->[$level+1]}} <= 0) {
+				$self->{recurbox}->{buttons}->[$level]->[$count]->{next}->set_sensitive(TRUE);
 			}
 		} elsif ($type eq 'byyearday') {
-			$self->{buttons}->[$level]->[$count]->{add}->set_label('add another day');
-			$self->{buttons}->[$level]->[$count]->{remove}->set_label('remove this day');
+			$self->{recurbox}->{buttons}->[$level]->[$count]->{add}->set_label('add another day');
+			$self->{recurbox}->{buttons}->[$level]->[$count]->{remove}->set_label('remove this day');
 		} elsif ($type eq 'byweekno') {
-			$self->{buttons}->[$level]->[$count]->{add}->set_label('add another week');
-			$self->{buttons}->[$level]->[$count]->{remove}->set_label('remove this week');
-			if ($#{@{$self->{widgets}->[$level+1]}} <= 0) {
-				$self->{buttons}->[$level]->[$count]->{next}->set_sensitive(TRUE);
+			$self->{recurbox}->{buttons}->[$level]->[$count]->{add}->set_label('add another week');
+			$self->{recurbox}->{buttons}->[$level]->[$count]->{remove}->set_label('remove this week');
+			if ($#{@{$self->{recurbox}->{hbox}->[$level+1]}} <= 0) {
+				$self->{recurbox}->{buttons}->[$level]->[$count]->{next}->set_sensitive(TRUE);
 			}
 		}
-		$self->{buttons}->[$level]->[$count]->{add}->set_sensitive(TRUE);
-		$self->{buttons}->[$level]->[$count]->{remove}->set_sensitive(TRUE);
+		$self->{recurbox}->{buttons}->[$level]->[$count]->{add}->set_sensitive(TRUE);
+		$self->{recurbox}->{buttons}->[$level]->[$count]->{remove}->set_sensitive(TRUE);
 	};
 	my $menu_tree = [
 		'^'  => {
@@ -822,7 +809,7 @@ sub month_or_day_of_the_year {
 	];
 	if ($count > 0) {
 		# Understand the $count=0 selection
-		my $brother = $self->{buttons}->[$level]->[0]->{type};
+		my $brother = $self->{recurbox}->{buttons}->[$level]->[0]->{type};
 		if ($brother eq 'bymonth') {
 			$label->set_label('choose another month');
 			$menu_tree = [
@@ -875,3 +862,117 @@ sub month_or_day_of_the_year {
 1;
 
 __END__
+
+=head1 NAME
+
+Gtk2::Ex::ICal::Recur is a widget for scheduling a recurring 
+set of 'events' (events in the calendar sense). Like a meeting
+appointment for example, on all mondays and thursdays for the next 3
+months. Kinda like Evolution/Outlook meeting schedule.
+
+=head1 DESCRIPTION
+
+=head1 SYNOPSIS
+
+	my $recur = Gtk2::Ex::ICal::Recur->new;
+	my $model = {
+		'dtstart' => { 
+			year => 2000,
+			month  => 6,
+			day    => 20,
+		},
+		'count' => 17,
+		'freq' => 'yearly',
+		'interval' => '5',
+		'byweekno' => [1, -1],
+		'byday' => ['su','fr', 'mo'],
+	};
+	$recur->set_model($model);
+
+	my $window = Gtk2::Window->new;
+	$window->signal_connect(destroy => sub { Gtk2->main_quit; });
+
+	my $vbox = Gtk2::VBox->new(FALSE);
+	my $hbox = Gtk2::HBox->new(FALSE);
+	my $preview = Gtk2::Button->new_from_stock('gtk-preview');
+	$preview->signal_connect('clicked' => 
+		sub {
+			$recur->update_preview;		
+		}
+	);
+
+	my $done = Gtk2::Button->new_from_stock('gtk-done');
+	$done->signal_connect('clicked' => 
+		sub {
+			print Dumper $recur->get_model;
+		}
+	);
+
+=head1 METHODS
+
+=head2 Gtk2::Ex::ICal::Recur->new()
+
+Accepts no arguments. Returns the object.
+
+=head2 Gtk2::Ex::ICal::Recur->set_model($model)
+
+The C<model> is designed based on the the ICal spec. Please look at the 
+C<DateTime::Event::ICal>. The structure of this hash is based on that module.
+
+	my $model = {
+		'dtstart' => { 
+			year => 2000,
+			month  => 6,
+			day    => 20,
+		},
+		'count' => 17,
+		'freq' => 'yearly',
+		'interval' => '5',
+		'byweekno' => [1, -1],
+		'byday' => ['su','fr', 'mo'],
+	};
+	$recur->set_model($model);
+
+
+=head2 Gtk2::Ex::ICal::Recur->get_model()
+
+Returns a C<model> as described in the section above.
+
+=head2 Gtk2::Ex::ICal::Recur->update_preview()
+
+This method retrieves the model and sends it to an instance of C<DateTime::Event::ICal>
+internally and gets a list of dates. The list is then displayed in a listview.
+
+=head1 AUTHOR
+
+Ofey Aikon, C<< <ofey.aikon at gmail dot com> >>
+
+=head1 BUGS
+
+You tell me. Send me an email !
+
+=head1 ACKNOWLEDGEMENTS
+
+To the wonderful gtk-perl-list.
+
+=head1 COPYRIGHT & LICENSE
+
+Copyright 2004 Ofey Aikon, All Rights Reserved.
+
+This library is free software; you can redistribute it and/or modify it under 
+the terms of the GNU Library General Public License as published by the 
+Free Software Foundation; 
+
+This library is distributed in the hope that it will be useful, but WITHOUT ANY 
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A 
+PARTICULAR PURPOSE. See the GNU Library General Public License for more details.
+
+You should have received a copy of the GNU Library General Public License along 
+with this library; if not, write to the 
+Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307 USA.
+
+=head1 SEE ALSO
+
+DateTime::Event::ICal(3pm)
+
+=cut
