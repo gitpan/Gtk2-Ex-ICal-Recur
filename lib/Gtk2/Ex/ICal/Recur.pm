@@ -1,6 +1,6 @@
 package Gtk2::Ex::ICal::Recur;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 use strict;
 use warnings;
@@ -29,7 +29,8 @@ sub new {
 		{ 'label' => 'Month(s)', 'code' => 'monthly' },
 		{ 'label' => 'Week(s)' , 'code' => 'weekly' },
 		{ 'label' => 'Day(s)'  , 'code' => 'daily' },
-	];	
+	];
+	$self->{exceptionslist} = undef;
 	$self->{icalselection} = Gtk2::Ex::ICal::Recur::Selection->new;
 	bless ($self, $class);
 	$self->{widget} = $self->package_all;
@@ -48,7 +49,6 @@ sub update_preview {
 	];
 	@{$self->{preview}->{slist}->{data}} = @$temp;
 	$self->{preview}->{slist}->show_all;
-	Gtk2->main_iteration while Gtk2->events_pending;
 	$self->{model} = $self->get_model;
 	my $date_list = $self->generate_date_list($self->{model});
 	if ($#{@$date_list} >= 0) {
@@ -131,6 +131,17 @@ sub get_model {
 	} else {
 		$model->{'count'} = $self->{duration}->{'count'}->get_value if $self->{duration}->{'count'};	
 	}
+	my @temp = @{$self->{exceptionslist}->{data}};
+	my @exceptions = ();
+	foreach my $x (@temp) {
+		my ($mon, $day, $junk, $year) = split /\W/, $x->[0];
+		my $monthlist = month();
+		my $i = 0;
+		my %hash = map {$_ => $i++} @$monthlist;
+		my $date = { month => $hash{$mon}, day => $day, year => $year};
+		push @exceptions, $date;
+	}
+	$model->{exceptions} = \@exceptions;
 	$self->{model} = $model;
 	return $model;
 }
@@ -142,22 +153,35 @@ sub get_model {
 sub generate_date_list {
 	my ($self, $origmodel) = @_;
 	my $model;
-	%$model = %$origmodel;
 	my @list;
-	$model->{dtstart} = hash_to_datetime($model->{dtstart}) if ($model->{dtstart});
-	$model->{dtend} = hash_to_datetime($model->{dtend}) if ($model->{dtend});
-	$self->{preview}->{progressbar}->pulse;
+	$model->{dtstart} = hash_to_datetime($origmodel->{dtstart}) if ($origmodel->{dtstart});
+	$model->{dtend} = hash_to_datetime($origmodel->{dtend}) if ($origmodel->{dtend});
+	$model->{count} = $origmodel->{count} if ($origmodel->{count});
+	$model->{freq} = $origmodel->{freq} if ($origmodel->{freq});
+	$model->{interval} = $origmodel->{interval} if ($origmodel->{interval});
+	$model->{byday} = $origmodel->{byday} if ($origmodel->{byday});
+	$model->{bymonthday} = $origmodel->{bymonthday} if ($origmodel->{bymonthday});
+	$model->{byweekno} = $origmodel->{byweekno} if ($origmodel->{byweekno});
+	$model->{bymonth} = $origmodel->{bymonth} if ($origmodel->{bymonth});
 	my $set = DateTime::Event::ICal->recur(%$model);
 	my $iter = $set->iterator;
+	my $exceptions = $self->{model}->{exceptions};
+	my $hash;
+	foreach my $x (@$exceptions) {
+		my $year = $x->{year};
+		my $mon = $x->{month};
+		my $day= $x->{day};
+		$hash->{"$year\-$mon\-$day"} = 1;
+	}
 	my $i = 0;
 	while ( my $dt = $iter->next ) {
-		push @list, $dt->ymd('/');
-		$i++;
-		#last if ($i>10);
-		#$self->{preview}->{progressbar}->set_fraction($i/10);
-		Gtk2->main_iteration while Gtk2->events_pending;
+		my $year = $dt->year;
+		my $mon = $dt->month;
+		my $day= $dt->day;
+		my $month = month()->[$mon-1];
+		$mon--;
+		push @list, "$month $day \, $year" unless $hash->{"$year\-$mon\-$day"};
 	}
-	$self->{preview}->{progressbar}->set_fraction(1);
 	return \@list;
 }
 
@@ -169,7 +193,7 @@ sub hash_to_datetime {
 
 sub package_all {
 	my ($self) = @_;
-	my $exceptions = exceptions();
+	my $exceptions = $self->exceptions();
 	my $duration = $self->duration();
 	my $preview = $self->preview();
 
@@ -187,7 +211,7 @@ sub package_all {
 
 	my $hbox = Gtk2::HBox->new(FALSE);
 	$hbox->pack_start($duration_frame, FALSE, FALSE, 0);
-	$hbox->pack_start($exceptions_frame, TRUE, TRUE, 0);
+	$hbox->pack_start($exceptions_frame, FALSE, FALSE, 0);
 
 	my $mainvbox = Gtk2::VBox->new(FALSE);
 	$mainvbox->pack_start($recur_frame, TRUE, TRUE, 0);
@@ -195,7 +219,7 @@ sub package_all {
 
 	my $mainhbox = Gtk2::HBox->new(FALSE);
 	$mainhbox->pack_start($mainvbox, TRUE, TRUE, 0);
-	$mainhbox->pack_start($preview_frame, FALSE, FALSE, 0);
+	$mainhbox->pack_start($preview_frame, TRUE, TRUE, 0);
 	
 	return $mainhbox;
 }
@@ -210,10 +234,7 @@ sub preview {
 	$scroll->set_policy('never','automatic');
 	$scroll->add($slist);
 	my $cal = Gtk2::Calendar->new;
-	my $previewprogress = Gtk2::ProgressBar->new;
-	$self->{preview}->{progressbar} = $previewprogress;
 	$vbox->pack_start($scroll, TRUE, TRUE, 0);
-	$vbox->pack_start($previewprogress, FALSE, FALSE, 0);
 	#$vbox->pack_start($cal, FALSE, FALSE, 0);
 	return $vbox;
 }
@@ -226,10 +247,10 @@ sub duration {
 	my $start_date_label = Gtk2::Label->new('Starting on');
 	my $end_on_date  = $self->get_date_setter('dtend');
 	my $end_on_label = Gtk2::Label->new('and ending on');
-	my $end_after_label = Gtk2::Label->new('and ending after');
+	my $end_after_label = Gtk2::Label->new(' and ending after ');
 	my $count = Gtk2::SpinButton->new_with_range(1,100,1);
 	$self->{duration}->{count} = $count;
-	my $occurrences_label = Gtk2::Label->new('occurrences');
+	my $occurrences_label = Gtk2::Label->new(' occurrences ');
 	
 	$table->attach_defaults($start_date_label,1,2,0,1);
 	$table->attach_defaults($start_date,2,3,0,1);
@@ -313,7 +334,9 @@ sub get_date_setter{
 }
 
 sub exceptions {
+	my ($self) = @_;
 	my $slist = Gtk2::Ex::Simple::List->new ('Exceptions'    => 'text',);
+	$slist->get_selection->set_mode ('multiple');
 	$slist->set_headers_visible(FALSE);
 	my $buttonbox = Gtk2::HBox->new;
 	my $addbutton = Gtk2::Button->new_from_stock('gtk-add');
@@ -330,7 +353,7 @@ sub exceptions {
 				sub {
 					my ($year, $month, $day) = $cal->get_date;
 					$month = month()->[$month];
-					push @{$slist->{data}}, ["(not yet implemented)"] if ($#{@{$slist->{data}}} <= 0);
+					#push @{$slist->{data}}, ["(not yet implemented)"] if ($#{@{$slist->{data}}} <= 0);
 					push @{$slist->{data}}, ["$month $day\, $year"];
 					$calwindow->hide;
 				}
@@ -350,12 +373,28 @@ sub exceptions {
 			$calwindow->show_all;
 		}
 	);
+	$removebutton->signal_connect('button-release-event' => 
+		sub {
+			my @sel = $slist->get_selected_indices;
+			my @temp = @{$slist->{data}};
+			my @newlist;
+			my %hash = map { $_ => 1 } @sel;
+			for (my $i=0; $i<=$#temp; $i++) {
+				push @newlist, [$temp[$i]->[0]] unless $hash{$i};
+			}
+			@{$slist->{data}} = ();
+			foreach my $x (@newlist) {
+				push @{$slist->{data}}, $x;
+			}			
+		}
+	);
 	$buttonbox->pack_start($addbutton, TRUE, TRUE, 0);
 	$buttonbox->pack_start($removebutton, TRUE, TRUE, 0);
 	my $vbox = Gtk2::VBox->new;
 	my $scroll = Gtk2::ScrolledWindow->new;
 	$scroll->set_policy('never','automatic');
 	$scroll->add($slist);
+	$self->{exceptionslist} = $slist;
 	$vbox->pack_start($scroll, TRUE, TRUE, 0);
 	$vbox->pack_start($buttonbox, FALSE, FALSE, 0);
 	return $vbox;
@@ -367,12 +406,13 @@ sub month {
 		'February',
 		'March',
 		'April',
+		'May',
 		'June',
 		'July',
 		'August',
 		'September',
 		'October',
-		'Novemeber',
+		'November',
 		'December',
 	];
 }
@@ -606,7 +646,7 @@ sub create_box {
 	push @$box_as_array, $addbutton;
 	push @$box_as_array, $removebutton;
 	push @$box_as_array, $nextbutton;
-	
+
 	return $box_as_array;
 }
 
@@ -865,10 +905,10 @@ __END__
 
 =head1 NAME
 
-Gtk2::Ex::ICal::Recur is a widget for scheduling a recurring 
+Gtk2::Ex::ICal::Recur - A widget for scheduling a recurring 
 set of 'events' (events in the calendar sense). Like a meeting
 appointment for example, on all mondays and thursdays for the next 3
-months. Kinda like Evolution/Outlook meeting schedule.
+months. Kinda like Evolution or Outlook meeting schedule.
 
 =head1 DESCRIPTION
 
@@ -973,6 +1013,6 @@ Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-13
 
 =head1 SEE ALSO
 
-DateTime::Event::ICal(3pm)
+DateTime::Event::ICal
 
 =cut

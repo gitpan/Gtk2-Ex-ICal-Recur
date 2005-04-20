@@ -1,6 +1,6 @@
 package Gtk2::Ex::ICal::Recur::Selection;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 use strict;
 use warnings;
@@ -148,7 +148,7 @@ sub week_day {
 __END__
 =head1 NAME
 
-Gtk2::Ex::ICal::Recur::Selection is not to be used directly. This is just a 
+Gtk2::Ex::ICal::Recur::Selection - This class is not to be used directly. This is just a 
 helper class for the C<Gtk2::Ex::ICal::Recur> module.
 
 =head1 AUTHOR
@@ -166,21 +166,12 @@ To the wonderful gtk-perl-list.
 =head1 COPYRIGHT & LICENSE
 
 Copyright 2004 Ofey Aikon, All Rights Reserved.
-
-This library is free software; you can redistribute it and/or modify it under 
-the terms of the GNU Library General Public License as published by the 
-Free Software Foundation; 
-
-This library is distributed in the hope that it will be useful, but WITHOUT ANY 
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A 
-PARTICULAR PURPOSE. See the GNU Library General Public License for more details.
-
-You should have received a copy of the GNU Library General Public License along 
-with this library; if not, write to the 
-Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307 USA.
+This library is free software; you can redistribute it and/or modify it under the terms of the GNU Library General Public License as published by the Free Software Foundation; 
+This library is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Library General Public License for more details.
+You should have received a copy of the GNU Library General Public License along with this library; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307 USA.
 
 =head1 SEE ALSO
 
-Gtk2::Ex::ICal::Recur(3pm)
+Gtk2::Ex::ICal::Recur
 
-=cut
+=cut
