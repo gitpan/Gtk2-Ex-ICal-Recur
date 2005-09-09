@@ -1,6 +1,6 @@
 package Gtk2::Ex::ICal::Recur;
 
-our $VERSION = '0.03';
+our $VERSION = '0.05';
 
 use strict;
 use warnings;
@@ -98,11 +98,11 @@ sub set_model {
 		# Save this for hourly
 	}
 	if ($model->{dtstart}) {
-		$self->{duration}->{dtstart}->select_month($model->{dtstart}->{month}, $model->{dtstart}->{year});
+		$self->{duration}->{dtstart}->select_month($model->{dtstart}->{month}-1, $model->{dtstart}->{year});
 		$self->{duration}->{dtstart}->select_day($model->{dtstart}->{day});
 	}	
 	if ($model->{dtend}) {
-		$self->{duration}->{dtend}->select_month($model->{dtend}->{month}, $model->{dtend}->{year});
+		$self->{duration}->{dtend}->select_month($model->{dtend}->{month}-1, $model->{dtend}->{year});
 		$self->{duration}->{dtend}->select_day($model->{dtend}->{day});
 		$self->{duration}->{end_on_radio}->set_active(TRUE);
 	} elsif ($model->{count}) {
@@ -160,6 +160,7 @@ sub generate_date_list {
 	$model->{freq} = $origmodel->{freq} if ($origmodel->{freq});
 	$model->{interval} = $origmodel->{interval} if ($origmodel->{interval});
 	$model->{byday} = $origmodel->{byday} if ($origmodel->{byday});
+	$model->{byyearday} = $origmodel->{byyearday} if ($origmodel->{byyearday});
 	$model->{bymonthday} = $origmodel->{bymonthday} if ($origmodel->{bymonthday});
 	$model->{byweekno} = $origmodel->{byweekno} if ($origmodel->{byweekno});
 	$model->{bymonth} = $origmodel->{bymonth} if ($origmodel->{bymonth});
@@ -180,7 +181,7 @@ sub generate_date_list {
 		my $day= $dt->day;
 		my $month = month()->[$mon-1];
 		$mon--;
-		push @list, "$month $day \, $year" unless $hash->{"$year\-$mon\-$day"};
+		push @list, "$month $day\, $year" unless $hash->{"$year\-$mon\-$day"};
 	}
 	return \@list;
 }
@@ -196,7 +197,7 @@ sub package_all {
 	my $exceptions = $self->exceptions();
 	my $duration = $self->duration();
 	my $preview = $self->preview();
-
+	enable_dnd($self->{preview}->{slist}, $self->{exceptionslist});
 	my $exceptions_frame = Gtk2::Frame->new('Exceptions');
 	my $duration_frame = Gtk2::Frame->new('Duration');
 	my $recur_frame = Gtk2::Frame->new('Recurrence Pattern');
@@ -211,7 +212,7 @@ sub package_all {
 
 	my $hbox = Gtk2::HBox->new(FALSE);
 	$hbox->pack_start($duration_frame, FALSE, FALSE, 0);
-	$hbox->pack_start($exceptions_frame, FALSE, FALSE, 0);
+	$hbox->pack_start($exceptions_frame, TRUE, TRUE, 0);
 
 	my $mainvbox = Gtk2::VBox->new(FALSE);
 	$mainvbox->pack_start($recur_frame, TRUE, TRUE, 0);
@@ -229,6 +230,7 @@ sub preview {
 	my $vbox = Gtk2::VBox->new(FALSE);
 	my $slist = Gtk2::Ex::Simple::List->new ('Exceptions'    => 'text',);
 	$slist->set_headers_visible(FALSE);
+	$slist->get_selection->set_mode ('multiple');
 	$self->{preview}->{slist} = $slist;
 	my $scroll = Gtk2::ScrolledWindow->new;
 	$scroll->set_policy('never','automatic');
@@ -245,12 +247,16 @@ sub duration {
 	my $start_date = $self->get_date_setter('dtstart', $self->{dtstart});
 	
 	my $start_date_label = Gtk2::Label->new('Starting on');
+	$start_date_label->set_alignment(0, 0.5);	
 	my $end_on_date  = $self->get_date_setter('dtend');
 	my $end_on_label = Gtk2::Label->new('and ending on');
-	my $end_after_label = Gtk2::Label->new(' and ending after ');
+	$end_on_label->set_alignment(0, 0.5);	
+	my $end_after_label = Gtk2::Label->new('and ending after');
+	$end_after_label->set_alignment(0, 0.5);
 	my $count = Gtk2::SpinButton->new_with_range(1,100,1);
 	$self->{duration}->{count} = $count;
 	my $occurrences_label = Gtk2::Label->new(' occurrences ');
+	$occurrences_label->set_alignment(0, 0.5);	
 	
 	$table->attach_defaults($start_date_label,1,2,0,1);
 	$table->attach_defaults($start_date,2,3,0,1);
@@ -290,23 +296,29 @@ sub get_date_setter{
 	my ($recur, $key) = @_;
 	my $hbox = Gtk2::HBox->new(FALSE);
 	my $date_label = Gtk2::Label->new;
+	$date_label->set_alignment(0, 0.5);
 	my $cal = Gtk2::Calendar->new;
 	$recur->{duration}->{$key} = $cal;
 	$cal->signal_connect('day-selected' => 
 		sub {
 			my ($year, $month, $day) = $cal->get_date;
-			$recur->{$key} = { year => $year, month => $month, day => $day };
+			# The $self->{dtstart} and $self->{dtend} gets set here
+			$recur->{$key} = { year => $year, month => $month+1, day => $day };
 			$month = month()->[$month];
 			my $date_str = "$month $day \, $year";
 			$date_label->set_label($date_str);
 		}
 	);
 	my ($year, $month, $day) = $cal->get_date;
-	$recur->{$key} = { year => $year, month => $month, day => $day };
+	
+
+	# The $self->{dtstart} and $self->{dtend} gets set here
+	$recur->{$key} = { year => $year, month => $month+1, day => $day };
+	
 	$month = month()->[$month];
 	my $date_str = "$month $day \, $year";
 	$date_label->set_label($date_str);
-	my $date_cal_button = Gtk2::Button->new_from_stock(' ^ ');
+	my $date_cal_button = Gtk2::Button->new(' ^ ');
 	$hbox->pack_start($date_cal_button, FALSE, FALSE, 0);
 	$hbox->pack_start($date_label, FALSE, TRUE, 0);
 	$date_cal_button->signal_connect('button-release-event' => 
@@ -328,7 +340,8 @@ sub get_date_setter{
 			$vbox->pack_start($hbox, TRUE, TRUE, 0);
 			$calwindow->add($vbox);
 			$calwindow->set_position('mouse');
-			$calwindow->show_all;		}
+			$calwindow->show_all;		
+		}
 	);
 	return $hbox;
 }
@@ -468,8 +481,11 @@ sub set_day_of_the_year {
 	my $list = $self->{icalselection}->day_of_the_year();
 	my $hash;
 	for (my $i=0; $i<=$#{@$list}; $i+=2) {
-		my $x = $list->[$i+1]->{callback_data};
-		$hash->{$x->[2]} = $x->[1];
+		my $x = $list->[$i+1]->{children};				
+		for (my $j=0; $j<=$#{@$x}; $j+=2) {
+			my $y = $x->[$j+1]->{callback_data};
+			$hash->{$y->[2]} = $list->[$i].'/'.$y->[1];
+		}
 	}
 	$self->update_ui_from_model(\@yeardays, $hash, '/^/by day of the year/', $level);
 }
@@ -480,8 +496,11 @@ sub set_weeknumber_of_the_year {
 	my $list = $self->{icalselection}->weeknumber_of_the_year();
 	my $hash;
 	for (my $i=0; $i<=$#{@$list}; $i+=2) {
-		my $x = $list->[$i+1]->{callback_data};
-		$hash->{$x->[2]} = $x->[1];
+		my $x = $list->[$i+1]->{children};				
+		for (my $j=0; $j<=$#{@$x}; $j+=2) {
+			my $y = $x->[$j+1]->{callback_data};
+			$hash->{$y->[2]} = $list->[$i].'/'.$y->[1];
+		}
 	}
 	$self->update_ui_from_model(\@weeknums, $hash, '/^/by weeknumber of the year/', $level);
 }
@@ -504,8 +523,11 @@ sub set_month_day_by_day {
 	my $list = $self->{icalselection}->month_day_by_day();
 	my $hash;
 	for (my $i=0; $i<=$#{@$list}; $i+=2) {
-		my $x = $list->[$i+1]->{callback_data};
-		$hash->{$x->[2]} = $x->[1];
+		my $x = $list->[$i+1]->{children};				
+		for (my $j=0; $j<=$#{@$x}; $j+=2) {
+			my $y = $x->[$j+1]->{callback_data};
+			$hash->{$y->[2]} = $list->[$i].'/'.$y->[1];
+		}
 	}
 	$self->update_ui_from_model(\@monthdays, $hash, '/^/by day/', $level);
 }
@@ -696,9 +718,47 @@ sub removebuttonclicked {
 	$self->packbox();
 }
 
+sub _source_drag_data_get {
+	my ($widget, $context, $data, $info, $time) = @_;
+	$data->set ($data->target, 0, 0);
+}
+
+sub _drag_data_received {
+	my ($tolist, $context, $x, $y, $data, $info, $time, $fromlist) = @_;
+	my @selectedindices = $fromlist->get_selected_indices;
+	_move_from_to ($fromlist, $tolist, \@selectedindices);
+}
+
+sub _move_from_to {
+	my ($fromlist, $tolist, $selectedindices) = @_;
+	# Populate the tolist
+	foreach my $i (@$selectedindices) {
+		push @{$tolist->{data}}, $fromlist->{data}->[$i];
+	}
+	my %hash = map { $_ => 1 } @$selectedindices;
+	my @temp;
+	# Remove entries from fromlist
+	for (my $i=0; $i<=$#{@{$fromlist->{data}}}; $i++) {
+		push @temp, $fromlist->{data}->[$i]->[0] unless exists($hash{$i});
+	}
+	@{$fromlist->{data}} = @temp;	
+}
+
+sub enable_dnd {
+	my ($fromlist, $tolist) = @_;
+	$fromlist->drag_source_set (['button1_mask', 'button3_mask'],['copy', 'move'], 
+		{'target' => "STRING", 'flags' => [], 'info' => 0});
+	$tolist->drag_dest_set('all', ['copy', 'move'], 
+		{'target' => "STRING", 'flags' => [], 'info' => 0});
+	$fromlist->signal_connect ('drag-data-get', \&_source_drag_data_get);
+	$tolist->signal_connect('drag-data-received', \&_drag_data_received, $fromlist);	
+}
+
 sub day_of_the_month {
 	my ($self, $level, $count) = @_;
-	my $label = Gtk2::Label->new('choose a day/weekday');
+	my $label = Gtk2::Label->new;
+	$label->set_markup('<span foreground="red">choose a day/weekday</span>');	
+	$label->set_alignment(0, 0.5);	
 	my $callback = sub {
 		my ($data) = @_;
 		my $type = $data->[0];
@@ -767,7 +827,9 @@ sub day_of_the_month {
 
 sub day_of_the_week {
 	my ($self, $level, $count) = @_;
-	my $label = Gtk2::Label->new('choose a day of the week');
+	my $label = Gtk2::Label->new;
+	$label->set_markup('<span foreground="red">choose a day of the week</span>');	
+	$label->set_alignment(0, 0.5);	
 	my $callback = sub {
 		my ($data) = @_;
 		my $type = $data->[0];
@@ -799,7 +861,9 @@ sub day_of_the_week {
 
 sub month_or_day_of_the_year {
 	my ($self, $level, $count) = @_;
-	my $label = Gtk2::Label->new('choose a month/week/day');
+	my $label = Gtk2::Label->new;
+	$label->set_markup('<span foreground="red">choose a month/week/day</span>');
+	$label->set_alignment(0, 0.5);	
 	my $callback = sub {
 		my ($data) = @_;
 		my $type = $data->[0];
@@ -851,7 +915,8 @@ sub month_or_day_of_the_year {
 		# Understand the $count=0 selection
 		my $brother = $self->{recurbox}->{buttons}->[$level]->[0]->{type};
 		if ($brother eq 'bymonth') {
-			$label->set_label('choose another month');
+			$label->set_markup('<span foreground="red">choose another month</span>');
+			$label->set_alignment(0, 0.5);	
 			$menu_tree = [
 				'^'  => {
 					item_type  => '<Branch>',
@@ -864,7 +929,8 @@ sub month_or_day_of_the_year {
 				},
 			];
 		} elsif ($brother eq 'byweekno'){
-			$label->set_label('choose another weeknumber');
+			$label->set_markup('<span foreground="red">choose another weeknumber</span>');
+			$label->set_alignment(0, 0.5);	
 			$menu_tree = [
 				'^'  => {
 					item_type  => '<Branch>',
@@ -877,7 +943,8 @@ sub month_or_day_of_the_year {
 				},
 			];
 		} elsif ($brother eq 'byyearday'){
-			$label->set_label('choose another day');
+			$label->set_markup('<span foreground="red">choose another day</span>');
+			$label->set_alignment(0, 0.5);	
 			$menu_tree = [
 				'^'  => {
 					item_type  => '<Branch>',

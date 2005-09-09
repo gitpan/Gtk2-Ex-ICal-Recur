@@ -15,8 +15,7 @@ my $model2 = {
 	'count' => 17,
 	'freq' => 'yearly',
 	'interval' => '5',
-	'byweekno' => [1, -1],
-	'byday' => ['su','fr', 'mo'],
+	'byyearday' => [1, -1],
 };
 $recur->set_model($model2);
 

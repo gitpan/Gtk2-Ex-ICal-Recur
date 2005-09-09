@@ -51,7 +51,7 @@ $vbox->pack_start($recur->{widget}, TRUE, TRUE, 0);
 $vbox->pack_start($hbox, FALSE, FALSE, 5);
 
 $window->add($vbox);
-$window->set_default_size(700,350);
+$window->set_default_size(600,350);
 $window->show_all;
 
 Gtk2->main;
