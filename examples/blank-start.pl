@@ -1,3 +1,5 @@
+use strict;
+use warnings;
 use Gtk2 '-init';
 use Gtk2::Ex::ICal::Recur;
 use Gtk2::Ex::Simple::Menu;

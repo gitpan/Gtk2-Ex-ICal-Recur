@@ -34,4 +34,3 @@ ok($recur->update_preview());
 
 $recur = Gtk2::Ex::ICal::Recur->new;
 isa_ok($recur, "Gtk2::Ex::ICal::Recur");
-

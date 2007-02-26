@@ -1,6 +1,6 @@
 package Gtk2::Ex::ICal::Recur;
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 use strict;
 use warnings;
@@ -11,6 +11,7 @@ use Glib qw /TRUE FALSE/;
 use Data::Dumper;
 use Gtk2::Ex::ICal::Recur::Selection;
 use DateTime::Event::ICal;
+use Gtk2::Ex::CalendarButton;
 
 ###########################################################
 # There are four public methods. The rest are all private #
@@ -98,17 +99,31 @@ sub set_model {
 		# Save this for hourly
 	}
 	if ($model->{dtstart}) {
-		$self->{duration}->{dtstart}->select_month($model->{dtstart}->{month}-1, $model->{dtstart}->{year});
-		$self->{duration}->{dtstart}->select_day($model->{dtstart}->{day});
+	    $self->{'dtstart'} = $model->{'dtstart'};
+	    $self->{duration}->{dtstart}->set_date(
+	        _transform_date($model->{dtstart})
+	    );
 	}	
 	if ($model->{dtend}) {
-		$self->{duration}->{dtend}->select_month($model->{dtend}->{month}-1, $model->{dtend}->{year});
-		$self->{duration}->{dtend}->select_day($model->{dtend}->{day});
+	    $self->{'dtend'} = $model->{'dtend'};
+	    $self->{duration}->{dtend}->set_date(
+	        _transform_date($model->{dtend})
+	    );
 		$self->{duration}->{end_on_radio}->set_active(TRUE);
 	} elsif ($model->{count}) {
 		$self->{duration}->{count}->set_value($model->{count});
 		$self->{duration}->{end_after_radio}->set_active(TRUE);
 	}
+}
+
+sub _transform_date {
+    my ($datehash) = @_;
+    my $datearray = [
+        $datehash->{year},
+        $datehash->{month},
+        $datehash->{day},
+    ];
+    return $datearray;                       
 }
 
 sub get_model {
@@ -244,13 +259,41 @@ sub preview {
 sub duration {
 	my ($self) = @_;
 	my $table = Gtk2::Table->new(3, 4, FALSE);
-	my $start_date = $self->get_date_setter('dtstart', $self->{dtstart});
 	
+	$self->{duration}->{dtstart} = Gtk2::Ex::CalendarButton->new;
+	$self->{duration}->{dtstart}->signal_connect ('date-changed' => 
+	    sub {
+	        my ($calbutton) = @_;
+	        my $date = $calbutton->get_date;
+	        my $hash = {
+	            year => $date->[0],
+	            month => $date->[1],
+	            day => $date->[2]
+	        };
+	        $self->{dtstart} = $hash;
+	    }
+	);
+	
+	$self->{duration}->{dtend} = Gtk2::Ex::CalendarButton->new;
+	$self->{duration}->{dtend}->signal_connect ('date-changed' => 
+	    sub {
+	        my ($calbutton) = @_;
+	        my $date = $calbutton->get_date;
+	        my $hash = {
+	            year => $date->[0],
+	            month => $date->[1],
+	            day => $date->[2]
+	        };
+	        $self->{dtend} = $hash;
+	    }
+	);	
+		
 	my $start_date_label = Gtk2::Label->new('Starting on');
 	$start_date_label->set_alignment(0, 0.5);	
-	my $end_on_date  = $self->get_date_setter('dtend');
+	
 	my $end_on_label = Gtk2::Label->new('and ending on');
 	$end_on_label->set_alignment(0, 0.5);	
+	
 	my $end_after_label = Gtk2::Label->new('and ending after');
 	$end_after_label->set_alignment(0, 0.5);
 	my $count = Gtk2::SpinButton->new_with_range(1,100,1);
@@ -258,14 +301,15 @@ sub duration {
 	my $occurrences_label = Gtk2::Label->new(' occurrences ');
 	$occurrences_label->set_alignment(0, 0.5);	
 	
-	$table->attach_defaults($start_date_label,1,2,0,1);
-	$table->attach_defaults($start_date,2,3,0,1);
+	$table->attach($start_date_label,1,2,0,1,'fill','fill',0,0);
+	$table->attach($self->{duration}->{dtstart}->{button},2,3,0,1,'fill','fill',0,0);
+	
 	my $end_on_radio = Gtk2::RadioButton->new;
 	my $end_after_radio = Gtk2::RadioButton->new($end_on_radio);
 	$self->{duration}->{end_on_radio} = $end_on_radio;
 	$self->{duration}->{end_after_radio} = $end_after_radio;
 	
-	$end_on_date->set_sensitive($end_on_radio->get_active);
+	$self->{duration}->{dtend}->{button}->set_sensitive($end_on_radio->get_active);
 	$end_on_label->set_sensitive($end_on_radio->get_active);
 	$end_after_label->set_sensitive($end_after_radio->get_active);
 	$count->set_sensitive($end_after_radio->get_active);
@@ -273,7 +317,7 @@ sub duration {
 
 	$end_on_radio->signal_connect('toggled' => 
 		sub {
-			$end_on_date->set_sensitive($end_on_radio->get_active);
+			$self->{duration}->{dtend}->{button}->set_sensitive($end_on_radio->get_active);
 			$end_on_label->set_sensitive($end_on_radio->get_active);
 			$end_after_label->set_sensitive($end_after_radio->get_active);
 			$count->set_sensitive($end_after_radio->get_active);
@@ -283,67 +327,13 @@ sub duration {
 	
 	$table->attach_defaults($end_on_radio,0,1,1,2);
 	$table->attach_defaults($end_on_label,1,2,1,2);
-	$table->attach_defaults($end_on_date,2,3,1,2);
+	$table->attach_defaults($self->{duration}->{dtend}->{button},2,3,1,2);
 
 	$table->attach_defaults($end_after_radio,0,1,2,3);
 	$table->attach_defaults($end_after_label,1,2,2,3);
 	$table->attach_defaults($count,2,3,2,3);
 	$table->attach_defaults($occurrences_label,3,4,2,3);
 	return $table;
-}
-
-sub get_date_setter{
-	my ($recur, $key) = @_;
-	my $hbox = Gtk2::HBox->new(FALSE);
-	my $date_label = Gtk2::Label->new;
-	$date_label->set_alignment(0, 0.5);
-	my $cal = Gtk2::Calendar->new;
-	$recur->{duration}->{$key} = $cal;
-	$cal->signal_connect('day-selected' => 
-		sub {
-			my ($year, $month, $day) = $cal->get_date;
-			# The $self->{dtstart} and $self->{dtend} gets set here
-			$recur->{$key} = { year => $year, month => $month+1, day => $day };
-			$month = month()->[$month];
-			my $date_str = "$month $day \, $year";
-			$date_label->set_label($date_str);
-		}
-	);
-	my ($year, $month, $day) = $cal->get_date;
-	
-
-	# The $self->{dtstart} and $self->{dtend} gets set here
-	$recur->{$key} = { year => $year, month => $month+1, day => $day };
-	
-	$month = month()->[$month];
-	my $date_str = "$month $day \, $year";
-	$date_label->set_label($date_str);
-	my $date_cal_button = Gtk2::Button->new(' ^ ');
-	$hbox->pack_start($date_cal_button, FALSE, FALSE, 0);
-	$hbox->pack_start($date_label, FALSE, TRUE, 0);
-	$date_cal_button->signal_connect('button-release-event' => 
-		sub {
-			my ($self, $event) = @_;
-			my $calwindow = Gtk2::Window->new('popup');
-			my $vbox = Gtk2::VBox->new;
-			my $ok = Gtk2::Button->new_from_stock('gtk-ok');
-			$ok->signal_connect('clicked' => 
-				sub {
-					$calwindow->hide;
-				}
-			);
-			my $hbox = Gtk2::HBox->new;
-			$hbox->pack_start(Gtk2::Label->new, TRUE, TRUE, 0);
-			$hbox->pack_start($ok, TRUE, TRUE, 0);
-			$hbox->pack_start(Gtk2::Label->new, TRUE, TRUE, 0);
-			$vbox->pack_start($cal, TRUE, TRUE, 0);
-			$vbox->pack_start($hbox, TRUE, TRUE, 0);
-			$calwindow->add($vbox);
-			$calwindow->set_position('mouse');
-			$calwindow->show_all;		
-		}
-	);
-	return $hbox;
 }
 
 sub exceptions {
@@ -415,18 +405,18 @@ sub exceptions {
 
 sub month {
 	return [
-		'January',
-		'February',
-		'March',
-		'April',
+		'Jan',
+		'Feb',
+		'Mar',
+		'Apr',
 		'May',
-		'June',
-		'July',
-		'August',
-		'September',
-		'October',
-		'November',
-		'December',
+		'Jun',
+		'Jul',
+		'Aug',
+		'Sep',
+		'Oct',
+		'Nov',
+		'Dec',
 	];
 }
 
@@ -631,12 +621,28 @@ sub create_box {
 
 	my $box_as_array = [];
 	my $hbox = Gtk2::HBox->new(FALSE);
-	my $addbutton = Gtk2::Button->new_with_label('add another');
-	my $nextbutton = Gtk2::Button->new_with_label('Continue>>');
-	my $removebutton = Gtk2::Button->new_with_label('remove this');
+	my $tooltips = Gtk2::Tooltips->new;
+
+	my $addbutton = Gtk2::Button->new;
+	my $removebutton = Gtk2::Button->new;
+	my $nextbutton = Gtk2::Button->new;
+
+	$tooltips->set_tip($addbutton, 'add another', undef);
+	$tooltips->set_tip($removebutton, 'remove this', undef);
+	$tooltips->set_tip($nextbutton, 'continue to next level', undef);
+
+	my $add_icon = Gtk2::Image->new_from_stock('gtk-add', 'GTK_ICON_SIZE_BUTTON');
+	my $remove_icon = Gtk2::Image->new_from_stock('gtk-remove', 'GTK_ICON_SIZE_BUTTON');
+	my $next_icon = Gtk2::Image->new_from_stock('gtk-go-forward', 'GTK_ICON_SIZE_BUTTON');
+	
+	$addbutton->set_image($add_icon);
+	$removebutton->set_image($remove_icon);
+	$nextbutton->set_image($next_icon);
+	
 	$self->{recurbox}->{buttons}->[$level]->[$count]->{add} = $addbutton;
 	$self->{recurbox}->{buttons}->[$level]->[$count]->{next} = $nextbutton;
 	$self->{recurbox}->{buttons}->[$level]->[$count]->{remove} = $removebutton;	
+
 	$addbutton->set_sensitive(FALSE);
 	$nextbutton->set_sensitive(FALSE);
 	$removebutton->set_sensitive(FALSE);
@@ -759,6 +765,9 @@ sub day_of_the_month {
 	my $label = Gtk2::Label->new;
 	$label->set_markup('<span foreground="red">choose a day/weekday</span>');	
 	$label->set_alignment(0, 0.5);	
+	
+	my $tooltips = Gtk2::Tooltips->new;
+		
 	my $callback = sub {
 		my ($data) = @_;
 		my $type = $data->[0];
@@ -768,8 +777,16 @@ sub day_of_the_month {
 		$self->{recurbox}->{buttons}->[$level]->[$count]->{type} = $type;
 		$text = "and $text" if ($count > 0);
 		$label->set_label($text);
-		$self->{recurbox}->{buttons}->[$level]->[$count]->{add}->set_label('add another day');
-		$self->{recurbox}->{buttons}->[$level]->[$count]->{remove}->set_label('remove this day');
+		$tooltips->set_tip(
+    		$self->{recurbox}->{buttons}->[$level]->[$count]->{add},
+    		'add another day',
+    		undef
+		);
+		$tooltips->set_tip(
+    		$self->{recurbox}->{buttons}->[$level]->[$count]->{remove},
+    		'remove this day',
+    		undef
+		);
 		$self->{recurbox}->{buttons}->[$level]->[$count]->{add}->set_sensitive(TRUE);
 		#$self->{recurbox}->{buttons}->[$level]->[$count]->{next}->set_sensitive(TRUE);
 		$self->{recurbox}->{buttons}->[$level]->[$count]->{remove}->set_sensitive(TRUE);
@@ -830,6 +847,7 @@ sub day_of_the_week {
 	my $label = Gtk2::Label->new;
 	$label->set_markup('<span foreground="red">choose a day of the week</span>');	
 	$label->set_alignment(0, 0.5);	
+	my $tooltips = Gtk2::Tooltips->new;
 	my $callback = sub {
 		my ($data) = @_;
 		my $type = $data->[0];
@@ -839,8 +857,16 @@ sub day_of_the_week {
 		$self->{recurbox}->{buttons}->[$level]->[$count]->{type} = $type;
 		$text = "and $text" if ($count > 0);
 		$label->set_label($text);
-		$self->{recurbox}->{buttons}->[$level]->[$count]->{add}->set_label('add another weekday');
-		$self->{recurbox}->{buttons}->[$level]->[$count]->{remove}->set_label('remove this weekday');
+		$tooltips->set_tip(
+    		$self->{recurbox}->{buttons}->[$level]->[$count]->{add},
+    		'add another weekday',
+    		undef
+		);
+		$tooltips->set_tip(
+    		$self->{recurbox}->{buttons}->[$level]->[$count]->{remove},
+    		'remove this weekday',
+    		undef
+		);
 		$self->{recurbox}->{buttons}->[$level]->[$count]->{add}->set_sensitive(TRUE);
 		#$self->{recurbox}->{buttons}->[$level]->[$count]->{next}->set_sensitive(TRUE);
 		$self->{recurbox}->{buttons}->[$level]->[$count]->{remove}->set_sensitive(TRUE);
@@ -863,7 +889,9 @@ sub month_or_day_of_the_year {
 	my ($self, $level, $count) = @_;
 	my $label = Gtk2::Label->new;
 	$label->set_markup('<span foreground="red">choose a month/week/day</span>');
-	$label->set_alignment(0, 0.5);	
+	$label->set_alignment(0, 0.5);
+    my $tooltips = Gtk2::Tooltips->new;
+    
 	my $callback = sub {
 		my ($data) = @_;
 		my $type = $data->[0];
@@ -874,17 +902,41 @@ sub month_or_day_of_the_year {
 		$text = "and $text" if ($count > 0);
 		$label->set_label($text);
 		if ($type eq 'bymonth') {
-			$self->{recurbox}->{buttons}->[$level]->[$count]->{add}->set_label('add another month');
-			$self->{recurbox}->{buttons}->[$level]->[$count]->{remove}->set_label('remove this month');
+		    $tooltips->set_tip (
+		        $self->{recurbox}->{buttons}->[$level]->[$count]->{add},
+		        'add another month',
+		        undef
+		    );
+		    $tooltips->set_tip (
+		        $self->{recurbox}->{buttons}->[$level]->[$count]->{remove},
+		        'remove this month',
+		        undef
+		    );
 			if ($#{@{$self->{recurbox}->{hbox}->[$level+1]}} <= 0) {
 				$self->{recurbox}->{buttons}->[$level]->[$count]->{next}->set_sensitive(TRUE);
 			}
 		} elsif ($type eq 'byyearday') {
-			$self->{recurbox}->{buttons}->[$level]->[$count]->{add}->set_label('add another day');
-			$self->{recurbox}->{buttons}->[$level]->[$count]->{remove}->set_label('remove this day');
+    		$tooltips->set_tip(
+        		$self->{recurbox}->{buttons}->[$level]->[$count]->{add},
+        		'add another day',
+        		undef
+    		);
+    		$tooltips->set_tip(
+        		$self->{recurbox}->{buttons}->[$level]->[$count]->{remove},
+        		'remove this day',
+        		undef
+    		);
 		} elsif ($type eq 'byweekno') {
-			$self->{recurbox}->{buttons}->[$level]->[$count]->{add}->set_label('add another week');
-			$self->{recurbox}->{buttons}->[$level]->[$count]->{remove}->set_label('remove this week');
+    		$tooltips->set_tip(
+        		$self->{recurbox}->{buttons}->[$level]->[$count]->{add},
+        		'add another week',
+        		undef
+    		);
+    		$tooltips->set_tip(
+        		$self->{recurbox}->{buttons}->[$level]->[$count]->{remove},
+        		'remove this week',
+        		undef
+    		);
 			if ($#{@{$self->{recurbox}->{hbox}->[$level+1]}} <= 0) {
 				$self->{recurbox}->{buttons}->[$level]->[$count]->{next}->set_sensitive(TRUE);
 			}
